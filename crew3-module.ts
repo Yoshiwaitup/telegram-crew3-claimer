@@ -309,7 +309,7 @@ Claimed XP: *${stats.xp}*` : ''}`}
   getAutoValidateQuests = (quests) => quests.filter((item) => item.autoValidate)
 
   // Get twitters quests
-  getTwittersQuests = (quests) => quests.filter((item) => item.submissionType === 'twitter')
+  getTwitterQuests = (quests) => quests.filter((item) => item.submissionType === 'twitter')
 
    /**
    * Get twitter tasks for quest
@@ -388,13 +388,13 @@ Claimed XP: *${stats.xp}*` : ''}`}
    * @param communities list from API
    * @returns array of links to join
    */
-   getTwitterTasksForCommunities = async (communities) => {
-    const report = [`Start collect discord quests for ${communities.length} communities:`]
+   getDiscordTasksForCommunities = async (communities) => {
+    const report = [`Start collecting Discord quests for ${communities.length} communities:`]
     for (const community of communities) {
       const all = await this.getAllQuests(community.subdomain)
       const unlocked = this.getUnlockedQuests(all)
       const quests = unlocked.filter(item => ['discord'].includes(item.submissionType))
-      console.log(quests)
+      console.log(quests);
     }
     return report
   }
@@ -409,10 +409,16 @@ Claimed XP: *${stats.xp}*` : ''}`}
   claimQuest = async (subdomain, quest, answer = null) => {
     console.log(`\nTry to claim ${subdomain} community quest,\nType: ${quest.submissionType},\nName: ${quest.name}${answer ? `\nAnswer: ${answer}` : ''}`)
     const data = new FormData()
+
     if (answer && answer.length > 0)
       data.append("value", answer)
     else if (['quiz', 'text', 'url', 'image'].includes(quest.submissionType)) {
       return `Quest _${quest.name}_ require answer:` + JSON.stringify(quest.validationData.question | quest.validationData)
+    }
+
+    if (quest.submissionType === "twitter") {
+      const actions = await this.getTwitterTasksForQuest(quest);
+
     }
 
     data.append("questId", quest.id)
@@ -420,17 +426,17 @@ Claimed XP: *${stats.xp}*` : ''}`}
     data.append("token", "03AIIukzihdCbeBYOTilKEJhVc5vbbPPVmhZiHnMEaP00-xb22Ze9ld8R2lQiLEOYOcpIHIYVwbCvW1iPd4YkQcW2njEkT1EZfRi9rKAjz17hwVMYuYZeQvnBrPwMOz1XcIH2u3etW67yH6wUoXq4hpmbJdSEXKokz_tRMeOmScNCaQ7Pwp70yuMj8x0jPiBmkmSnjAmttyEZKN7I7DJcJUwW53v9Vkvne1YlwcpMQ2TOC2RJwTsSpr-gbgWcQXsjinq-81z7JFBv-Pi-iOgk5k416-CYBWkoFjqhk2kHHKkDwwiaZFHpA7SAAIvzKeZubg0gPeAOh_7K0CZPPO3jJojOUU1Iyoj-803vIzHMiuvxz-5LY2a_M2OH7RaKmCnAtFmAMKWiVho_jeTjaBEOUYpLmb1sA-ek6mqq0QT7R1-S-lknxP5uRipYGVkeBXRH6SxBijJ27rFgjPSgzjBAZERj5xB6aUnfw33ATWYK5jO_Q5e9nVUIkJVoReJQxKqwpGQKUpt_xsC3p")
     return await this.crew3.post(`communities/${subdomain}/quests/${quest.id}/claim`, data, this.getHeaders(subdomain))
       .then(r => {
-        console.log(`Claim status - ${r.data.status}`)
-        if (r.data.status === 'success')
+        if (r.data.status === 'success') {
+          console.log(`Claim status - ${r.data.status}`)
           return `Claim *${quest.name}*, earn *${r.data.xp}* points`
+        }
+        console.log(`${quest.name} already claimed!`);
         return `${quest.name} already claimed!`
       })
       .catch(async (e) => {
         if (e?.response?.data?.message) {
-          console.log('e?.response?.data?.message')
           return e?.response?.data?.message
         } else if (e?.response?.data?.error) {
-          console.log('e?.response?.data?.error')
           console.log(e?.response?.data)
           return e?.response?.data?.error.message || e?.response?.data?.error?.follow || e?.response?.data?.error?.retweet || e?.response?.data?.error?.reply || e?.response?.data?.error?.like
         } else {
@@ -467,10 +473,8 @@ Claimed XP: *${stats.xp}*` : ''}`}
       })
       .catch(async (e) => {
         if (e?.response?.data?.message) {
-          console.log('e?.response?.data?.message')
           return e?.response?.data?.message
         } else if (e?.response?.data?.error) {
-          console.log('e?.response?.data?.error')
           console.log(e?.response?.data)
           return e?.response?.data?.error.message || e?.response?.data?.error?.follow || e?.response?.data?.error?.retweet || e?.response?.data?.error?.reply || e?.response?.data?.error?.like
         } else {
