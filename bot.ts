@@ -3,17 +3,18 @@ import { CrewProfile } from './crew3-module'
 import * as google from './answers-database'
 
 import { Telegraf, Context } from 'telegraf'
-import { Keyboard, Key, MakeOptions, KeyboardButton } from 'telegram-keyboard'
+import { Keyboard, Key } from 'telegram-keyboard'
 import LocalSession from 'telegraf-session-local'
 
 import { promises as fs } from 'fs'
 import { JsonRpcProvider } from '@ethersproject/providers'
-import { formatEther, parseEther } from '@ethersproject/units'
 import { Wallet } from '@ethersproject/wallet'
 
 import delay from 'delay'
 import axios from 'axios'
 import { HeaderGenerator } from 'header-generator'
+
+import { createClient } from 'redis';
 
 const headerGenerator = new HeaderGenerator({
   browserListQuery: 'last 5 chrome versions',
@@ -27,6 +28,9 @@ const CLAIM_TIMEOUT = parseInt(process.env.CLAIM_TIMEOUT)
 const SHORT_TIMEOUT = parseInt(process.env.SHORT_TIMEOUT)
 const ADMIN = parseInt(process.env.ADMIN_ID)
 const BOT_TOKEN = process.env.BOT_TOKEN
+
+const COMMUNITY_CATEGORIES_REGEX = "([NFT|DAO|Art|Music|Collectibles|Gaming|DeFi|Metaverse|Trading Cards|Infrastructure|Education|Startup|Protocol|Investing|DeSci|new|popular]+)_(.+)";
+const COMMUNITY_MAX_PAGE_NUMBER = 3;
 
 console.log(`\nCheck requirements:
 
@@ -79,7 +83,7 @@ const mainKeyboard = (ctx: BotContext) => {
   ]
 }
 
-const profileInfo = async (user, communities) => 
+const profileInfo = async (user, communities) =>
   `Account name: *${user.name}*
 
 *Twitter:* ${user.twitterUsername ? `[${user.twitterUsername}](https://twitter.com/${user.twitterUsername})` : 'NONE'}
@@ -101,23 +105,25 @@ const profileButtons = (user) => [
   [ Key.callback('Daily Connect »', `claim_none_${user.id}`), Key.callback('Quiz & questions »', `claim_quiz_${user.id}`) ],
   [ Key.callback('Discord »', `claim_discord_${user.id}`), Key.callback('Twitter »', `claim_twitter_${user.id}`) ],
   [
-    Key.callback('Rank and Level »', `level_${user.id}`), 
-    Key.callback('Get all invites »', `invites_${user.id}`) 
-  ], 
-  [
-    Key.callback('Share Quiz answers »', `answers_${user.id}`) 
+    Key.callback('Rank and Level »', `level_${user.id}`),
+    Key.callback('Get all invites »', `invites_${user.id}`)
   ],
-  [ 
-    Key.callback('New', `communities_new_${user.id}`), 
+  [
+    Key.callback('Share Quiz answers »', `answers_${user.id}`)
+  ],
+  [
+    Key.callback('Popular 🔥', `communities_popular_${user.id}`),
+    Key.callback('New', `communities_new_${user.id}`),
     Key.callback('Infrastructure', `communities_Infrastructure_${user.id}`),
     Key.callback('Protocol', `communities_Protocol_${user.id}`),
   ],
-  [ 
+  [
+    Key.callback('Top 🏆', `communities_all_${user.id}`),
     Key.callback(`Startup`, `communities_Startup_${user.id}`),
     Key.callback('NFT', `communities_NFT_${user.id}`),
     Key.callback('Education', `communities_Education_${user.id}`),
-  ], 
-  [ 
+  ],
+  [
     Key.callback('« Back to accounts', `all_accounts`),
     Key.callback('! Remove profile !', `delete_${user.id}`)
   ],
@@ -144,15 +150,14 @@ const claimQuestWithReport = async (ctx : BotContext, id, types = ['none'], answ
 
   const user = await crew.getUser()
   ctx.session.accounts[id].crew_user = user
-  
+
   if (userCommunities) {
     await ctx.reply('Claim processing, please wait logging message...', { parse_mode: 'Markdown' })
-      .then(async (m) => {
-        const report = await crew.claimQuestsByType(userCommunities, types, CLAIM_TIMEOUT, answers)
-        await bot.telegram.editMessageText(ctx.from.id, m.message_id, m.message_id.toString(), `*${getAccountName(ctx, id)}:*\n${report.join('\n')}`, Keyboard
-        .make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]])
-        .inline({ parse_mode: 'Markdown' })).catch(e => ctx.reply('Report too long...'))
-      })
+    const report = await crew.claimQuestsByType(userCommunities, types, CLAIM_TIMEOUT, answers)
+    for (const message of report) {
+      await ctx.reply(message, { parse_mode: 'Markdown' })
+    }
+    await ctx.reply("Done claiming ", Keyboard.make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]]).inline({ parse_mode: 'Markdown', disable_web_page_preview: true }));
   }
 }
 
@@ -166,6 +171,7 @@ const getCookieByPrivateKey = async (ctx, key) => {
       .post("authentification/wallet/nonce", { address: signer.address })
       .then(async (r) => {
         return api.post('authentification/wallet/verify-signature', {
+          network: 1,
           sessionId: r.data.id,
           signature: await signer.signMessage(r.data.nonce)
         }).then(async (r) => {
@@ -175,7 +181,7 @@ const getCookieByPrivateKey = async (ctx, key) => {
             cookie.push('subdomain=root')
 
             headers['cookie'] = cookie.join('; ')
-            
+
             const crew = new CrewProfile(headers)
             const user = await crew.getUser()
 
@@ -202,21 +208,21 @@ const getCookieByPrivateKey = async (ctx, key) => {
     })
   } catch (e) {
     console.log(e)
-    return ctx.reply(`Invalid private key! ${key}`) 
+    return ctx.reply(`Invalid private key! ${key}`)
   }
 }
 
 // Batch join command
 const join = async (ctx, ids, link) => {
   let joined = 0
-  const answers = await google.readAnswers()
+  const answers = await google.readAnswers(redisClient)
   for (const id of shuffle(ids)) {
     if (joined < ctx.session.invite.max) {
       const crew = new CrewProfile(ctx.session.accounts[id].crew_headers)
       const state = await crew.joinByReferral(ctx.session.invite.subdomain, ctx.session.invite.code)
       if (state.startsWith('Success')) {
         joined++
-        await ctx.reply(`*${getAccountName(ctx, id)}:* ${state}\nAutostart claimiing...`, { parse_mode: 'Markdown' }).catch(e => console.log(e))
+        await ctx.reply(`*${getAccountName(ctx, id)}:* ${state}\nAutostart claiming...`, { parse_mode: 'Markdown' }).catch(e => console.log(e))
         await claimQuestWithReport(ctx, id, ['none', 'text', 'telegram', 'quiz'], answers)
         await delay(CLAIM_TIMEOUT)
       } else {
@@ -252,6 +258,35 @@ bot
   .action(/all_accounts_(.+)/, async (ctx) => {
     return join(ctx, Object.keys(ctx.session.accounts), ctx.session.invite)
   })
+  .hears(/join (.*)/, async (ctx) => {
+    const crew = new CrewProfile(headerGenerator.getHeaders())
+    const community = await crew.searchCommunity(ctx.match[1])
+    const buttons = [
+      [
+        Key.callback('« Main menu', 'main'),
+        Key.callback('Join »', 'join_' + community.subdomain)
+      ],
+    ]
+    const actions = Keyboard.make(buttons).inline({ parse_mode: 'Markdown'})
+    return ctx.reply(`Join community *${community.name}*?`, actions).catch(e => {})
+  })
+  .action(new RegExp("join_communities_" + COMMUNITY_CATEGORIES_REGEX), async (ctx) => {
+    const crew = getCrewByMatch(ctx, 2)
+    const communities = await crew.getCommunities(ctx.match[1], COMMUNITY_MAX_PAGE_NUMBER, 0);
+    const userCommunitiesSubdomains = (await crew.getUserCommunities()).map((c) => c.subdomain);
+    const communitiesToJoin = communities.filter((c) => !userCommunitiesSubdomains.includes(c.subdomain));
+    await ctx.reply(`Found *${communitiesToJoin.length}* out of *${communities.length}* communities that are still not joined.`);
+    const report = await crew.joinCommunities(communitiesToJoin);
+    await ctx.reply(report.join("\n"))
+  })
+  .action(/join_(.+)/, async (ctx) => {
+    for (const id of Object.keys(ctx.session.accounts)) {
+      const crew = new CrewProfile(ctx.session.accounts[id].crew_headers)
+      await ctx.reply(`*${getAccountName(ctx, id)}:* ${await crew.joinCommunity(ctx.match[1])}`, { parse_mode: 'Markdown' })
+      await delay(SHORT_TIMEOUT)
+    }
+    return ctx.reply('Operation complete')
+  })
 
 // Batch leave command
 bot
@@ -275,14 +310,14 @@ bot
     }
     return ctx.reply('Operation complete')
   })
-  
+
 // Main menu
 const main = async (ctx: BotContext, msg = null) => {
   if (msg) {
     await ctx.replyWithMarkdown(msg)
     await delay(1000)
   }
-  
+
   let text = `Let's *f#$%ing* automate this boring!`
 
   const accounts = Object.entries(ctx.session.accounts)
@@ -290,7 +325,7 @@ const main = async (ctx: BotContext, msg = null) => {
     text += `\n\nYou have *${accounts.length}* account for work.`
     text += `\n\n_Select action:_`
   }
-  
+
   const actions = Keyboard.make(mainKeyboard(ctx)).inline({ parse_mode: 'Markdown', caption: text })
 
   return ctx.replyWithPhoto('https://aptos-mainnet-api.bluemove.net/uploads/nuclear_8cbc4d5fb5.png', actions)
@@ -401,17 +436,17 @@ bot.command('start', async (ctx) => main(ctx))
       report.push(`*${community.name}*\n\`${await crew.getReferralLink(community.subdomain)}\``)
     return ctx.reply(report.join('\n'), { parse_mode: 'Markdown', disable_web_page_preview: true })
   })
-  .action(/communities_([NFT|DAO|Art|Music|Collectibles|Gaming|DeFi|Metaverse|Trading Cards|Infrastructure|Education|Startup|Protocol|Investing|DeSci|new]+)_(.+)/, async (ctx) => {
+  .action(new RegExp("communities_" + COMMUNITY_CATEGORIES_REGEX), async (ctx) => {
     const crew = getCrewByMatch(ctx, 2)
     const user = await crew.getUser()
     const joined = (await crew.getUserCommunities()).map(community => community.name)
-    const communities = await crew.getCommunities(ctx.match[1], 3, 0)
+    const communities = await crew.getCommunities(ctx.match[1], COMMUNITY_MAX_PAGE_NUMBER, 0)
     for (const community of communities) {
       const message = await crew.communityMessage(community, user)
 
       await ctx.reply(message, Keyboard
         .make([[ Key.callback('« Leave community', `leave_${user.id}`, !joined.includes(community.name)) ],
-          [ Key.callback('Join »', `join_${user.id}`, joined.includes(community.name)) ],
+          [ Key.callback('Join »', `join_${community.subdomain}`, joined.includes(community.name)) ],
           [
             Key.callback('« Main menu', `main`),
             Key.callback('Account »', `account_${ctx.match[2]}`)
@@ -422,6 +457,18 @@ bot.command('start', async (ctx) => main(ctx))
           disable_web_page_preview: true
         }))
     }
+
+    await ctx.reply(`Want to join ${communities.length} communities from ${ctx.match[1]} category ?`, Keyboard
+        .make([[ Key.callback(`Join ${communities.length} "${ctx.match[1]}" communities »`, `join_communities_${ctx.match[1]}_${ctx.match[2]}`) ],
+          [
+            Key.callback('« Main menu', `main`),
+            Key.callback('Account »', `account_${ctx.match[2]}`)
+          ]
+        ])
+        .inline({
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true
+        }))
   })
   .hears(/new (\d*) (\d*)/, async (ctx) => {
     const crew = new CrewProfile(headerGenerator.getHeaders())
@@ -454,8 +501,8 @@ bot.command('start', async (ctx) => main(ctx))
       : ctx.match[2] === 'socials'
         ? Object.values(ctx.session.accounts).filter(({ crew_user: account }: any) => account.accounts.length > 1).map(user => user['crew_user'].id)
         : [ ctx.match[2] ]
-    
-    const answers = await google.readAnswers()
+
+    const answers = await google.readAnswers(redisClient)
     const type = ctx.match[1] === 'quiz'
       ? ['quiz', 'text']
       : ctx.match[1] === 'none'
@@ -469,6 +516,33 @@ bot.command('start', async (ctx) => main(ctx))
 
     return
   })
+    .action(/claim_community_([none|quiz|any]+)_(.+)_(.+)/, async (ctx) => {
+      const ids = ctx.match[2] === 'all'
+          ? Object.keys(ctx.session.accounts)
+          : ctx.match[2] === 'socials'
+              ? Object.values(ctx.session.accounts).filter(({ crew_user: account }: any) => account.accounts.length > 1).map(user => user['crew_user'].id)
+              : [ ctx.match[2] ]
+
+      const answers = await google.readAnswers(redisClient)
+      const type = ctx.match[1] === 'quiz'
+          ? ['quiz', 'text']
+          : ctx.match[1] === 'none'
+              ? ['none', 'telegram']
+              : ['none', 'telegram', 'quiz', 'text']
+
+      for (const id of shuffle(ids)) {
+        const crew = new CrewProfile(ctx.session.accounts[id].crew_headers)
+        const community = await crew.getCommunity(ctx.match[3]);
+
+        await ctx.reply('Claim processing, please wait logging message...', { parse_mode: 'Markdown' })
+        const report = await crew.claimQuestsByCommunity(community, type, CLAIM_TIMEOUT, answers)
+        for (const message of report) {
+          await ctx.reply(message, { parse_mode: 'Markdown' })
+        }
+        await ctx.reply("Done claiming ", Keyboard.make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]]).inline({ parse_mode: 'Markdown', disable_web_page_preview: true }));
+      }
+
+    })
   .action(/claim_([discord|twitter|social]+)_(.+)/, async (ctx) => {
     const ids = ctx.match[2] !== 'all'
       ? [ ctx.match[2] ]
@@ -485,8 +559,10 @@ bot.command('start', async (ctx) => main(ctx))
     return main(ctx, `Account \`${address}\` deleted, to recover send it private key again`)
   })
   .hears(/search (.*)/, async (ctx) => {
-    const crew = new CrewProfile(headerGenerator.getHeaders())
-    const community = await crew.searchCommunity(ctx.match[1])
+    const crew = new CrewProfile(headerGenerator.getHeaders());
+    const community = await crew.searchCommunity(ctx.match[1]);
+    const joined = (await crew.getUserCommunities()).map(community => community.name);
+    const userHasJoinedCommunity = joined.includes(community.name);
     if (community) {
       ctx.session.invite = {
         subdomain: community.subdomain,
@@ -496,7 +572,9 @@ bot.command('start', async (ctx) => main(ctx))
       const message = await crew.communityMessage(community)
       await ctx.reply(message, Keyboard
         .make([
-          [ Key.callback('Join »', `join_${ctx.session.currentProfile}`, !ctx.session.currentProfile) ],
+          [ Key.callback('Join »', `join_${community.subdomain}`, !userHasJoinedCommunity) ],
+          [ Key.callback('Leave »', `join_${community.subdomain}`, userHasJoinedCommunity) ],
+          [ Key.callback('Claim from all accounts »', `claim_community_any_all_${community.subdomain}`, !ctx.session.currentProfile) ],
           [ Key.callback('« Main menu', `main`)]
         ]).inline({
           parse_mode: 'Markdown',
@@ -506,12 +584,22 @@ bot.command('start', async (ctx) => main(ctx))
   })
 
 // Any other message
-bot.on('message', (ctx) => main(ctx))
+bot.on('message', (ctx) => ctx.reply(`Command not recognized`))
 
 bot.catch((e, ctx) => {
   console.log('Error', e)
   ctx.reply(`Some error, please see logs in console...`)
 })
 
+let redisClient;
+
+(async () => {
+  redisClient = createClient();
+
+  redisClient.on("error", (error) => console.error(`Error : ${error}`));
+
+  await redisClient.connect();
+})();
+
 bot.launch().catch(e => console.log(e))
-console.log('Telegram bot succsessfully launched! Write any message or /start to your bot in telegram...')
+console.log('Telegram bot successfully launched! Write any message or /start to your bot in telegram...')

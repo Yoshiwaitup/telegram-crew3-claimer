@@ -45,7 +45,7 @@ export class CrewProfile {
    */
   getUserCommunities = async () => await this.crew3
     .get('users/me/communities')
-    .then(r => r.data)
+    .then(r => r.data.communities)
     .catch(e => {
       console.log('User not connected to Crew3', e?.response?.data)
       return []
@@ -123,9 +123,10 @@ export class CrewProfile {
   joinCommunities = async (communities, timeout = 2000) => {
     const report = [`Start join to ${communities.length} communities:`]
     for(const community of communities) {
-      if (community.visibility !== 'private')
-        await this.joinCommunity(community)
-      else report.push(`${community.name} is private! Can't subscribe to it.`)
+      if (community.visibility !== 'private') {
+        const res = await this.joinCommunity(community.subdomain)
+        if (res) report.push(`Community ${community.name} was joined successfully ✅.`); else report.push(`Couldn't join ${community.name} ❌.`)
+      } else report.push(`${community.name} is private! Can't subscribe to it.`)
       await sleep(timeout)
     }
     return report
@@ -144,11 +145,11 @@ export class CrewProfile {
   /**
    * Notify message for telegram bot
    * @param community from API
-   * @param project for repeat messages
+   * @param user from API
    * @returns array of communities
    */
   communityMessage = async (community, user = null) => {
-    const stats = user ? await this.getUserCommunityStats(community, user) : null
+    const stats = user ? await this.getUserCommunityStats(community, user) : null;
     return `*${community.name}*${community.description ? `\n\n${community.description}` : ''}
 
 *Crew3:* [https://${community.subdomain}.crew3.xyz](https://${community.subdomain}.crew3.xyz)
@@ -157,7 +158,7 @@ export class CrewProfile {
 *Opensea:* [${community.opensea}](${community.opensea || 'NONE'})
 
 Blockchain: *${community.blockchain.toUpperCase()}*
-Categories: *${community.categories.join(', ')}*
+${community.sector ? `Sector: *${community.sector.toUpperCase()}*` : ''}
 
 Community rank: *${community.rank}*
 Quests: *${community.quests}*
@@ -166,36 +167,51 @@ Required: *${Object.entries(community.requiredFields).filter(([key, value]) => v
 ${stats ? `
 Invites: *${stats.invites}* | Level: *${stats.level}*
 Leaderboard rank: *${stats.rank}*
-Claimed XP: *${stats.xp}*` : ''}`}
-  
+Claimed XP: *${stats.xp}*` : ''}
+`}
+
   /**
    * Join single community without invite link
-   * @param community from API
+   * @param subdomain from API
    * @returns array of communities
    */
-  joinCommunity = async (community) => 
+  joinCommunity = async (subdomain) =>
     this.crew3
-      .post(`communities/${community.subdomain}/members`)
+      .post(`communities/${subdomain}/members`)
       .then(async (r) => true)
       .catch(e => {
         console.log(e)
         return false
       })
-      
+
+  /**
+   * Search get community by subdomain
+   * @param subdomain from API
+   * @returns object
+   */
+  getCommunity = async (subdomain) =>
+      this.crew3
+          .get(`communities/${subdomain}`)
+          .then(r => r.data)
+          .catch(e => {
+            console.log(e)
+            return false
+          })
+
   /**
    * Search first community matched keyword
    * @param keyword for search
    * @returns array of communities
    */
-  searchCommunity = async (keyword) => 
+  searchCommunity = async (keyword) =>
     this.crew3
-      .get(`communities/search?${new URLSearchParams({ search: keyword }).toString()}&limit=10`)
-      .then(async (r) => r.data[0])
+      .get(`communities?${new URLSearchParams({ search: keyword }).toString()}&limit=10`)
+      .then(r => r.data.communities[0])
       .catch(e => {
         console.log(e)
         return false
       })
-  
+
   /**
    * Replace headers for community requests
    * @param subdomain from API
@@ -221,7 +237,7 @@ Claimed XP: *${stats.xp}*` : ''}`}
    * @param subdomain from API
    * @returns array of communities
    */
-  leaveCommunity = async (community, user) => 
+  leaveCommunity = async (community, user) =>
     this.crew3
       .delete(`communities/${community.subdomain ? community.subdomain : community}/members/${user.id}`)
       .then(() => 'success')
@@ -244,7 +260,9 @@ Claimed XP: *${stats.xp}*` : ''}`}
 
   /**
    * Get Claimed answers of community
-   * @param subdomain from API
+   * @param community from API
+   * @param page
+   * @param pageSize
    * @returns true after processing
    */
   getCommunityAnswers = (community, page = 0, pageSize = 10) => {
@@ -252,8 +270,8 @@ Claimed XP: *${stats.xp}*` : ''}`}
       .get(`communities/${community.subdomain}/users/me/notifications?page=${page}&page_size=${pageSize}`)
       .then(r => {
         const answers = r.data.notifications
-          .filter(note => 
-            note.status === 'success' && 
+          .filter(note =>
+            note.status === 'success' &&
             note.type === 'claim' &&
             ['quiz', 'text'].includes(note.events[0].valueType)
           )
@@ -295,7 +313,7 @@ Claimed XP: *${stats.xp}*` : ''}`}
         quests.push(quest)
     return quests
   }
-  
+
   // Get unlocked and available quests
   getUnlockedQuests = (quests) => quests.filter((item) => item.unlocked && !item.inReview && item.open)
 
@@ -368,7 +386,7 @@ Claimed XP: *${stats.xp}*` : ''}`}
   }
 
   /**
-   * Get questsfor communities by submission type
+   * Get quests for communities by submission type
    * @param communities list from API
    * @returns array of links to join
    */
@@ -400,6 +418,27 @@ Claimed XP: *${stats.xp}*` : ''}`}
   }
 
   /**
+   * Get quest display text
+   * @param quest from API
+   * @returns string
+   */
+  getQuestDisplayText = (quest) => {
+     const getTextFromQuestDescription = (x) => {
+       if (x.content)
+         return x.content.map((x) => x.type === "text" ? x.text : getTextFromQuestDescription(x)).flat().join("");
+       else {
+         return "";
+       }
+     }
+
+     return `Name: *${quest.name}*
+Description:
+_${getTextFromQuestDescription(quest.description)}_
+Claim reward [here](https://crew3.xyz/c/mantle/questboard/${quest.id})
+`
+   }
+
+  /**
    * Claim quest for subdomain
    * @param subdomain from API
    * @param quest from API
@@ -412,7 +451,9 @@ Claimed XP: *${stats.xp}*` : ''}`}
     if (answer && answer.length > 0)
       data.append("value", answer)
     else if (['quiz', 'text', 'url', 'image'].includes(quest.submissionType)) {
-      return `Quest _${quest.name}_ require answer:` + JSON.stringify(quest.validationData.question | quest.validationData)
+      return `${this.getQuestDisplayText(quest)}
+requires answer:
+${JSON.stringify(quest.validationData)}`
     }
 
     data.append("questId", quest.id)
@@ -484,33 +525,51 @@ Claimed XP: *${stats.xp}*` : ''}`}
   /**
    * Claim all quests by type
    * @param communities from API
-   * @param answer form answers list, nessesary for text/quiz/url/image types of quests
+   * @param answers form answers list, nessesary for text/quiz/url/image types of quests
    * @param timeout to avoid account ban
    * @returns array of logs
    */
   claimQuestsByType = async (communities, types = ['none'], timeout = 2000, answers) => {
     const report = [`Start claim *${types.join(', ')}* quests for ${communities.length} communities:`]
     for (const community of communities) {
-      const all = await this.getAllQuests(community.subdomain)
-      const unlocked = this.getUnlockedQuests(all)
-      const quests = unlocked.filter(item => types.includes(item.submissionType))
-      const communityName = community.name.replace(/[^a-zA-Z0-9 ]/, '')
-      if (quests.length > 0)
-        report.push(`*${community.name}* \`${community.subdomain}\` (${quests.length} quests):`)
-      for (const quest of quests) {
-        let answer
-        if (['quiz', 'text', 'url', 'image'].includes(quest.submissionType) && answers[communityName]) {
-          answer = answers[communityName][quest.name.trim()]
-          if (answer)
-            report.push(' - ' + await this.claimQuest(community.subdomain, quest, answer ? answer : null))
-        } else {
-          report.push(' - ' + await this.claimQuest(community.subdomain, quest))
-        }
-      }
-      await sleep(timeout)
+      report.concat(await this.claimQuestsByCommunity(community, types, timeout, answers));
     }
+    console.log(report);
+    return report;
+  }
+
+  /**
+   * Claim all quests by subdomain
+   * @param community from API
+   * @param answers form answers list, nessesary for text/quiz/url/image types of quests
+   * @param types
+   * @param timeout to avoid account ban
+   * @returns array of logs
+   */
+  claimQuestsByCommunity = async (community, types = ['none'], timeout = 2000, answers) => {
+    const report = [`Start claim *${types.join(', ')}* quests for community *${community.name}*:`]
+    const all = await this.getAllQuests(community.subdomain)
+    const unlocked = this.getUnlockedQuests(all)
+    const quests = unlocked.filter(item => types.includes(item.submissionType))
+    const communityName = community.name.replace(/[^a-zA-Z0-9 ]/, '')
+    if (quests.length > 0)
+      report.push(`*${community.name}* \`${community.subdomain}\` (${quests.length} quests):`)
+    for (const quest of quests) {
+      if (['quiz', 'text', 'url', 'image'].includes(quest.submissionType) && answers[communityName]) {
+        const answer = answers[communityName][quest.name.trim()];
+        if (answer) {
+          report.push(' - ' + await this.claimQuest(community.subdomain, quest, answer ? answer : null))
+        } else {
+          report.push(` - Answer not found for following quest:\n${this.getQuestDisplayText(quest)}`)
+        }
+      } else {
+        report.push(' - ' + await this.claimQuest(community.subdomain, quest))
+      }
+    }
+    await sleep(timeout)
+    console.log(report);
     return report.length > 1
-      ? report
-      : [`No claimable quests with type *"${types.join(',')}"* in ${communities.length} communities!`]
+        ? report
+        : [`No claimable quests with type *"${types.join(',')}"* for community *${community.name}*!`]
   }
 }
