@@ -153,12 +153,11 @@ const claimQuestWithReport = async (ctx : BotContext, id, types = ['none'], answ
 
   if (userCommunities) {
     await ctx.reply('Claim processing, please wait logging message...', { parse_mode: 'Markdown' })
-      .then(async (m) => {
-        const report = await crew.claimQuestsByType(userCommunities, types, CLAIM_TIMEOUT, answers)
-        await bot.telegram.editMessageText(ctx.from.id, m.message_id, m.message_id.toString(), `*${getAccountName(ctx, id)}:*\n${report.join('\n')}`, Keyboard
-        .make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]])
-        .inline({ parse_mode: 'Markdown' })).catch(e => ctx.reply('Report too long...'))
-      })
+    const report = await crew.claimQuestsByType(userCommunities, types, CLAIM_TIMEOUT, answers)
+    for (const message of report) {
+      await ctx.reply(message, { parse_mode: 'Markdown' })
+    }
+    await ctx.reply("Done claiming ", Keyboard.make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]]).inline({ parse_mode: 'Markdown', disable_web_page_preview: true }));
   }
 }
 
@@ -533,15 +532,14 @@ bot.command('start', async (ctx) => main(ctx))
 
       for (const id of shuffle(ids)) {
         const crew = new CrewProfile(ctx.session.accounts[id].crew_headers)
-        const community = await crew.searchCommunity(ctx.match[3]);
+        const community = await crew.getCommunity(ctx.match[3]);
 
         await ctx.reply('Claim processing, please wait logging message...', { parse_mode: 'Markdown' })
-            .then(async (m) => {
-              const report = await crew.claimQuestsByCommunity(community, type, CLAIM_TIMEOUT, answers)
-              await bot.telegram.editMessageText(ctx.from.id, m.message_id, m.message_id.toString(), `*${getAccountName(ctx, id)}:*\n${report.join('\n')}`, Keyboard
-                  .make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]])
-                  .inline({ parse_mode: 'Markdown' })).catch(e => ctx.reply('Report too long...'))
-            })
+        const report = await crew.claimQuestsByCommunity(community, type, CLAIM_TIMEOUT, answers)
+        for (const message of report) {
+          await ctx.reply(message, { parse_mode: 'Markdown' })
+        }
+        await ctx.reply("Done claiming ", Keyboard.make([[ Key.callback('« Main menu', 'main'), Key.callback('To account »', `account_${id}`) ]]).inline({ parse_mode: 'Markdown', disable_web_page_preview: true }));
       }
 
     })

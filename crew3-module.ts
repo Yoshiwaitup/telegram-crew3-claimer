@@ -185,6 +185,20 @@ Claimed XP: *${stats.xp}*` : ''}
       })
 
   /**
+   * Search get community by subdomain
+   * @param subdomain from API
+   * @returns object
+   */
+  getCommunity = async (subdomain) =>
+      this.crew3
+          .get(`communities/${subdomain}`)
+          .then(r => r.data)
+          .catch(e => {
+            console.log(e)
+            return false
+          })
+
+  /**
    * Search first community matched keyword
    * @param keyword for search
    * @returns array of communities
@@ -437,7 +451,9 @@ Claim reward [here](https://crew3.xyz/c/mantle/questboard/${quest.id})
     if (answer && answer.length > 0)
       data.append("value", answer)
     else if (['quiz', 'text', 'url', 'image'].includes(quest.submissionType)) {
-      return `Quest _${quest.name}_ require answer:` + JSON.stringify(quest.validationData.question | quest.validationData)
+      return `${this.getQuestDisplayText(quest)}
+requires answer:
+${JSON.stringify(quest.validationData)}`
     }
 
     data.append("questId", quest.id)
