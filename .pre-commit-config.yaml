@@ -3,7 +3,7 @@ repos:
     rev: v2.7.1
     hooks:
       - id: prettier
-        files: \.(js|jsx|md)$
+        files: \.(js|jsx|ts|md)$
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.2.2
