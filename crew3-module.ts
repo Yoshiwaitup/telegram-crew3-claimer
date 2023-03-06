@@ -3,7 +3,7 @@ import axios, { AxiosInstance } from "axios";
 import FormData from "form-data";
 import delay from "delay";
 import { faker } from "@faker-js/faker";
-import {Twitter} from "./twitter-module";
+import { Twitter } from "./twitter-module";
 
 dotenv.config();
 
@@ -31,7 +31,8 @@ const TWITTER_PHRASES = [
 export const randomInt = (value) => Math.floor(Math.random() * value);
 export const sleep = async (value) => delay(value + randomInt(value));
 
-export const shuffle = (array) => array.sort(() => (Math.random() > 0.5 ? 1 : -1));
+export const shuffle = (array) =>
+  array.sort(() => (Math.random() > 0.5 ? 1 : -1));
 
 // Crew Module
 export class CrewProfile {
@@ -522,11 +523,11 @@ Claimed XP: *${stats.xp}*`
   getTextFromQuestDescription = (x) => {
     if (x.content)
       return x.content
-          .map((x) =>
-              x.type === "text" ? x.text : this.getTextFromQuestDescription(x)
-          )
-          .flat()
-          .join("");
+        .map((x) =>
+          x.type === "text" ? x.text : this.getTextFromQuestDescription(x)
+        )
+        .flat()
+        .join("");
     else {
       return "";
     }
@@ -538,7 +539,6 @@ Claimed XP: *${stats.xp}*`
    * @returns string
    */
   getQuestDisplayText = (quest) => {
-
     return `Name: *${quest.name}*
 Description:
 _${this.getTextFromQuestDescription(quest.description)}_
@@ -550,10 +550,11 @@ Claim reward [here](https://crew3.xyz/c/mantle/questboard/${quest.id})
    * Claim quest for subdomain
    * @param subdomain from API
    * @param quest from API
-   * @param answer form answers list, necessary for text/quiz/url/image types of quests
+   * @param answer from answers list, necessary for text/quiz/url/image types of quests
+   * @param twitterUserHandle from user context
    * @returns boolean
    */
-  claimQuest = async (subdomain, quest, answer = null) => {
+  claimQuest = async (subdomain, quest, answer, twitterUserHandle) => {
     console.log(
       `\nTry to claim ${subdomain} community quest,\nType: ${
         quest.submissionType
@@ -578,17 +579,20 @@ ${JSON.stringify(quest.validationData)}`;
 
       if (actions.includes("tweet")) {
         let tweetText = TWITTER_PHRASES[randomInt(TWITTER_PHRASES.length)];
-        if(quest.validationData.tweetWords) {
-          tweetText += `\n${quest.validationData.tweetWords.join(" ")}`
+        if (quest.validationData.tweetWords) {
+          tweetText += `\n${quest.validationData.tweetWords.join(" ")}`;
         }
         try {
-          const res = await twitter.tweet(tweetText)
-          data.append("value", `https://twitter.com/gamzuletova26/status/${res.id_str}`)
+          const res = await twitter.tweet(tweetText);
+          data.append(
+            "value",
+            `https://twitter.com/${twitterUserHandle}/status/${res.id_str}`
+          );
         } catch (e) {
           if (e.data.errors[0].code === 187) {
             console.log("Tweet is a duplicate, still want to claim quest.");
           } else if (e.data.errors[0].code === 185) {
-            return `Cannot tweet anymore today (user is over daily status update limit).`
+            return `Cannot tweet anymore today (user is over daily status update limit).`;
           } else {
             throw e;
           }
@@ -596,16 +600,18 @@ ${JSON.stringify(quest.validationData)}`;
       }
 
       if (actions.includes("reply")) {
-        const tweetText = quest.validationData.defaultReply || TWITTER_PHRASES[randomInt(TWITTER_PHRASES.length)];
+        const tweetText =
+          quest.validationData.defaultReply ||
+          TWITTER_PHRASES[randomInt(TWITTER_PHRASES.length)];
         try {
           await twitter.reply(tweetText, tweetId);
         } catch (e) {
           if (e.data.errors[0].code === 187) {
             console.log("Tweet is a duplicate, still want to claim quest.");
           } else if (e.data.errors[0].code === 385) {
-            return `Tweet has been deleted, cannot reply. Quest not claimable.`
+            return `Tweet has been deleted, cannot reply. Quest not claimable.`;
           } else if (e.data.errors[0].code === 185) {
-            return `Cannot tweet anymore today (user is over daily status update limit).`
+            return `Cannot tweet anymore today (user is over daily status update limit).`;
           } else {
             throw e;
           }
@@ -614,12 +620,16 @@ ${JSON.stringify(quest.validationData)}`;
 
       if (actions.includes("like")) {
         try {
-          await twitter.client.v1.post('favorites/create.json', { id: tweetId });
+          await twitter.client.v1.post("favorites/create.json", {
+            id: tweetId,
+          });
         } catch (e) {
           if (e.data.errors[0].code === 139) {
-            console.log("Tweet has already been liked, still want to claim quest.")
+            console.log(
+              "Tweet has already been liked, still want to claim quest."
+            );
           } else if (e.data.errors[0].code === 144) {
-            return `Tweet is not found, cannot like. Quest not claimable.`
+            return `Tweet is not found, cannot like. Quest not claimable.`;
           } else {
             throw e;
           }
@@ -631,7 +641,11 @@ ${JSON.stringify(quest.validationData)}`;
           await twitter.client.v1.post(`statuses/retweet/${tweetId}.json`);
         } catch (e) {
           if (e.data.errors[0].code === 327) {
-            console.log("Tweet has already been retweeted, still want to claim quest.")
+            console.log(
+              "Tweet has already been retweeted, still want to claim quest."
+            );
+          } else if (e.data.errors[0].code === 328) {
+            return `Retweet is not possible for this tweet. Quest not claimable`;
           } else {
             throw e;
           }
@@ -658,10 +672,17 @@ ${JSON.stringify(quest.validationData)}`;
         return `${quest.name} already claimed!`;
       })
       .catch(async (e) => {
-        if (e?.response?.data?.error?.follow && e?.response?.data?.error?.follow.includes("too many request")) {
+        if (
+          e?.response?.data?.error?.follow &&
+          e?.response?.data?.error?.follow.includes("too many request")
+        ) {
           console.error(e?.response?.data?.error?.follow);
-          const minutesToWait = parseInt(e?.response?.data?.error?.follow.match(/too many request, retry in ([0-9]+) minute/)[1]);
-          await sleep(minutesToWait*60*1000);
+          const minutesToWait = parseInt(
+            e?.response?.data?.error?.follow.match(
+              /too many request, retry in ([0-9]+) minute/
+            )[1]
+          );
+          await sleep(minutesToWait * 60 * 1000);
         }
 
         if (e?.response?.data?.message) {
@@ -746,7 +767,8 @@ ${JSON.stringify(quest.validationData)}`;
     communities,
     types = ["none"],
     timeout = 2000,
-    answers
+    answers,
+    user
   ) => {
     const report = [
       `Start claim *${types.join(", ")}* quests for ${
@@ -755,7 +777,13 @@ ${JSON.stringify(quest.validationData)}`;
     ];
     for (const community of shuffle(communities)) {
       report.concat(
-        await this.claimQuestsByCommunity(community, types, timeout, answers)
+        await this.claimQuestsByCommunity(
+          community,
+          types,
+          timeout,
+          answers,
+          user
+        )
       );
     }
     console.log(report);
@@ -774,7 +802,8 @@ ${JSON.stringify(quest.validationData)}`;
     community,
     types = ["none"],
     timeout = 2000,
-    answers
+    answers,
+    user
   ) => {
     const report = [
       `Start claim *${types.join(", ")}* quests for community *${
@@ -791,33 +820,31 @@ ${JSON.stringify(quest.validationData)}`;
       report.push(
         `*${community.name}* \`${community.subdomain}\` (${quests.length} quests):`
       );
+    const communityAnswers = answers[communityName];
     for (const quest of quests) {
+      let answer;
+      if (communityAnswers) {
+        answer = communityAnswers[quest.name.trim()];
+      }
       if (
         ["quiz", "text", "url", "image"].includes(quest.submissionType) &&
-        answers[communityName]
+        !answer
       ) {
-        const answer = answers[communityName][quest.name.trim()];
-        if (answer) {
-          report.push(
-            " - " +
-              (await this.claimQuest(
-                community.subdomain,
-                quest,
-                answer ? answer : null
-              ))
-          );
-        } else {
-          report.push(
-            ` - Answer not found for following quest:\n${this.getQuestDisplayText(
-              quest
-            )}`
-          );
-        }
-      } else {
         report.push(
-          " - " + (await this.claimQuest(community.subdomain, quest))
+          ` - Answer not found for following quest:\n${this.getQuestDisplayText(
+            quest
+          )}`
         );
       }
+      report.push(
+        " - " +
+          (await this.claimQuest(
+            community.subdomain,
+            quest,
+            answer,
+            user.twitterUsername
+          ))
+      );
     }
     await sleep(timeout);
     console.log(report);

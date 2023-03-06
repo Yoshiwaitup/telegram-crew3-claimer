@@ -87,7 +87,13 @@ const mainKeyboard = (ctx: BotContext) => {
     ],
     // [ Key.callback('👨‍💻 Claim Quiz & Questions »', 'claim_quiz_all', hide) ],
     // [ Key.callback('💻 Claim quests »', 'claim_any_all', hide) ],
-    [ Key.callback('🐔 Claim Discord & Twitter quests »', 'claim_social_all', hide) ],
+    [
+      Key.callback(
+        "🐔 Claim Discord & Twitter quests »",
+        "claim_social_all",
+        hide
+      ),
+    ],
     [Key.callback("🧙‍♂️ Batch Invite to communities»", "invite", hide)],
     [Key.callback("👋 Batch Leave communities»", "leave", hide)],
   ];
@@ -191,7 +197,8 @@ const claimQuestWithReport = async (
       userCommunities,
       types,
       CLAIM_TIMEOUT,
-      answers
+      answers,
+      user
     );
     for (const message of report) {
       await ctx.reply(message, { parse_mode: "Markdown" });
@@ -798,7 +805,8 @@ bot
         community,
         type,
         CLAIM_TIMEOUT,
-        answers
+        answers,
+        user
       );
       for (const message of report) {
         await ctx.reply(message, { parse_mode: "Markdown" });
@@ -824,9 +832,12 @@ bot
       await claimQuestWithReport(
         ctx,
         id,
-        ctx.match[1] === "social" ? ["twitter",
-          // "discord"
-        ] : [ctx.match[1]]
+        ctx.match[1] === "social"
+          ? [
+              "twitter",
+              // "discord"
+            ]
+          : [ctx.match[1]]
       );
 
     return ctx.reply(
