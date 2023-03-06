@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-import { CrewProfile } from "./crew3-module";
+import { CrewProfile, shuffle } from "./crew3-module";
 import * as google from "./answers-database";
 
 import { Telegraf, Context } from "telegraf";
@@ -87,7 +87,13 @@ const mainKeyboard = (ctx: BotContext) => {
     ],
     // [ Key.callback('👨‍💻 Claim Quiz & Questions »', 'claim_quiz_all', hide) ],
     // [ Key.callback('💻 Claim quests »', 'claim_any_all', hide) ],
-    // [ Key.callback('🐔 Claim Discord & Twitter quests »', 'claim_social_all', hide) ],
+    [
+      Key.callback(
+        "🐔 Claim Discord & Twitter quests »",
+        "claim_social_all",
+        hide
+      ),
+    ],
     [Key.callback("🧙‍♂️ Batch Invite to communities»", "invite", hide)],
     [Key.callback("👋 Batch Leave communities»", "leave", hide)],
   ];
@@ -165,8 +171,6 @@ const getAccountName = (ctx, id) =>
       "Null"
     : "NONE";
 
-const shuffle = (array) => array.sort(() => (Math.random() > 0.5 ? 1 : -1));
-
 const regexEthPrivateKey = /^[a-fA-F0-9]{64}/g;
 const regexEthAddress = /^(0x[a-fA-F0-9]{40})$/;
 
@@ -193,7 +197,8 @@ const claimQuestWithReport = async (
       userCommunities,
       types,
       CLAIM_TIMEOUT,
-      answers
+      answers,
+      user
     );
     for (const message of report) {
       await ctx.reply(message, { parse_mode: "Markdown" });
@@ -787,7 +792,7 @@ bot
         ? ["quiz", "text"]
         : ctx.match[1] === "none"
         ? ["none", "telegram"]
-        : ["none", "telegram", "quiz", "text"];
+        : ["none", "telegram", "quiz", "text", "twitter"];
 
     for (const id of shuffle(ids)) {
       const crew = new CrewProfile(ctx.session.accounts[id].crew_headers);
@@ -800,7 +805,8 @@ bot
         community,
         type,
         CLAIM_TIMEOUT,
-        answers
+        answers,
+        user
       );
       for (const message of report) {
         await ctx.reply(message, { parse_mode: "Markdown" });
@@ -826,7 +832,12 @@ bot
       await claimQuestWithReport(
         ctx,
         id,
-        ctx.match[1] === "social" ? ["twitter", "discord"] : [ctx.match[1]]
+        ctx.match[1] === "social"
+          ? [
+              "twitter",
+              // "discord"
+            ]
+          : [ctx.match[1]]
       );
 
     return ctx.reply(

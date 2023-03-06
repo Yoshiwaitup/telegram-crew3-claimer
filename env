@@ -3,3 +3,7 @@ ADMIN_ID=123456 # use https://t.me/my_id_bot bot or analogs
 ANSWERS="https://docs.google.com/spreadsheets/d/1Dk4qG6d7kjeK_iFbmxJ8Z2gGQRHZ_lsgdqwLiUxXMlg/edit#gid=0"
 CLAIM_TIMEOUT=5000
 SHORT_TIMEOUT=500
+TWITTER_CONSUMER_KEY=
+TWITTER_CONSUMER_SECRET=
+TWITTER_ACCESS_TOKEN_KEY=
+TWITTER_ACCESS_TOKEN_SECRET=
