@@ -12,6 +12,7 @@
   "dependencies": {
     "@faker-js/faker": "^7.6.0",
     "@noloco/google-spreadsheet": "github:noloco-io/node-google-spreadsheet#master",
+    "@twitter-api-v2/plugin-rate-limit": "^1.1.0",
     "axios": "1.1.3",
     "delay": "^5.0.0",
     "dotenv": "^16.0.3",
@@ -28,6 +29,7 @@
     "telegraf-session-local": "^2.1.0",
     "telegram-keyboard": "^2.3.2",
     "ts-node": "^10.9.1",
+    "twitter-api-v2": "^1.14.2",
     "typescript": "^4.9.3",
     "user-agents": "^1.0.1209"
   },
