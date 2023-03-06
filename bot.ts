@@ -14,8 +14,6 @@ import delay from "delay";
 import axios from "axios";
 import { HeaderGenerator } from "header-generator";
 
-import { createClient } from "redis";
-
 const headerGenerator = new HeaderGenerator({
   browserListQuery: "last 5 chrome versions",
   operatingSystems: ["windows", "macos", "ios", "android"],
@@ -279,7 +277,7 @@ const getCookieByPrivateKey = async (ctx, key) => {
 // Batch join command
 const join = async (ctx, ids, link) => {
   let joined = 0;
-  const answers = await google.readAnswers(redisClient);
+  const answers = await google.readAnswers(ctx);
   for (const id of shuffle(ids)) {
     if (joined < ctx.session.invite.max) {
       const crew = new CrewProfile(ctx.session.accounts[id].crew_headers);
@@ -759,7 +757,7 @@ bot
             .map((user) => user["crew_user"].id)
         : [ctx.match[2]];
 
-    const answers = await google.readAnswers(redisClient);
+    const answers = await google.readAnswers(ctx);
     const type =
       ctx.match[1] === "quiz"
         ? ["quiz", "text"]
@@ -786,7 +784,7 @@ bot
             .map((user) => user["crew_user"].id)
         : [ctx.match[2]];
 
-    const answers = await google.readAnswers(redisClient);
+    const answers = await google.readAnswers(ctx);
     const type =
       ctx.match[1] === "quiz"
         ? ["quiz", "text"]
@@ -797,6 +795,7 @@ bot
     for (const id of shuffle(ids)) {
       const crew = new CrewProfile(ctx.session.accounts[id].crew_headers);
       const community = await crew.getCommunity(ctx.match[3]);
+      const user = await crew.getUser();
 
       await ctx.reply("Claim processing, please wait logging message...", {
         parse_mode: "Markdown",
@@ -906,16 +905,6 @@ bot.catch((e, ctx) => {
   console.log("Error", e);
   ctx.reply(`Some error, please see logs in console...`);
 });
-
-let redisClient;
-
-(async () => {
-  redisClient = createClient();
-
-  redisClient.on("error", (error) => console.error(`Error : ${error}`));
-
-  await redisClient.connect();
-})();
 
 bot.launch().catch((e) => console.log(e));
 console.log(

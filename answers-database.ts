@@ -55,12 +55,11 @@ export const writeAnswers = async (data, url = URL) => {
 };
 
 // Read quest answers from Google Spreadsheet
-export const readAnswers = async (redisClient, url = URL) => {
-  const cacheResults = await redisClient.get(url);
+export const readAnswers = async (ctx, url = URL) => {
   let answers;
 
-  if (cacheResults) {
-    answers = JSON.parse(cacheResults);
+  if (ctx.answers) {
+    answers = ctx.answers;
   } else {
     const doc = new GoogleSpreadsheet(googleRegex.exec(url)[1]);
     await doc.useServiceAccountAuth(creds);
@@ -76,14 +75,14 @@ export const readAnswers = async (redisClient, url = URL) => {
         answers[sheet.title][row.question] = row.answer;
       }
     }
-    await redisClient.set(url, JSON.stringify(answers));
+    ctx.answers = answers;
   }
   return answers;
 };
 
-const checkConnection = async (redisClient) => {
+const checkConnection = async (ctx) => {
   try {
-    const answers = await readAnswers(redisClient);
+    const answers = await readAnswers(ctx);
     console.log(
       `Google OK. Database communities: ${Object.keys(answers).join(" | ")}`
     );
