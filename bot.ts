@@ -78,7 +78,7 @@ const mainKeyboard = (ctx: BotContext) => {
     [Key.callback("📑 Manage all accounts »", "all_accounts", hide)],
     [
       Key.callback(
-        "🌀 Claim Daily & Quiz & Questions »",
+        "🌀 Claim Daily & Quiz & Link & Questions »",
         "claim_none_all",
         hide
       ),
@@ -762,8 +762,8 @@ bot
       ctx.match[1] === "quiz"
         ? ["quiz", "text"]
         : ctx.match[1] === "none"
-        ? ["none", "telegram"]
-        : ["none", "telegram", "quiz", "text"];
+        ? ["none", "telegram", "link"]
+        : ["none", "telegram", "link", "quiz", "text"];
 
     for (const id of shuffle(ids)) {
       claimQuestWithReport(ctx, id, type, answers);
@@ -789,8 +789,8 @@ bot
       ctx.match[1] === "quiz"
         ? ["quiz", "text"]
         : ctx.match[1] === "none"
-        ? ["none", "telegram"]
-        : ["none", "telegram", "quiz", "text", "twitter"];
+        ? ["none", "telegram", "link"]
+        : ["none", "telegram", "link", "quiz", "text", "twitter"];
 
     for (const id of shuffle(ids)) {
       const crew = new CrewProfile(ctx.session.accounts[id].crew_headers);
