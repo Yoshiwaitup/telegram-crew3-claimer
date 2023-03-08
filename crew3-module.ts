@@ -599,7 +599,7 @@ ${JSON.stringify(quest.validationData)}`;
         }
       }
 
-      if (actions.includes("reply")) {
+      if (tweetId && actions.includes("reply")) {
         const tweetText =
           quest.validationData.defaultReply ||
           TWITTER_PHRASES[randomInt(TWITTER_PHRASES.length)];
@@ -618,7 +618,7 @@ ${JSON.stringify(quest.validationData)}`;
         }
       }
 
-      if (actions.includes("like")) {
+      if (tweetId && actions.includes("like")) {
         try {
           await twitter.client.v1.post("favorites/create.json", {
             id: tweetId,
@@ -636,7 +636,7 @@ ${JSON.stringify(quest.validationData)}`;
         }
       }
 
-      if (actions.includes("retweet")) {
+      if (tweetId && actions.includes("retweet")) {
         try {
           await twitter.client.v1.post(`statuses/retweet/${tweetId}.json`);
         } catch (e) {
