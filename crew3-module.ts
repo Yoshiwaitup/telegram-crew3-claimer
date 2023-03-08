@@ -763,7 +763,7 @@ ${JSON.stringify(quest.validationData)}`;
    * @param timeout to avoid account ban
    * @returns array of logs
    */
-  claimQuestsByType = async (
+  claimQuestsForUser = async (
     communities,
     types = ["none"],
     timeout = 2000,

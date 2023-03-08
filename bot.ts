@@ -191,7 +191,7 @@ const claimQuestWithReport = async (
     await ctx.reply("Claim processing, please wait logging message...", {
       parse_mode: "Markdown",
     });
-    const report = await crew.claimQuestsByType(
+    const report = await crew.claimQuestsForUser(
       userCommunities,
       types,
       CLAIM_TIMEOUT,
