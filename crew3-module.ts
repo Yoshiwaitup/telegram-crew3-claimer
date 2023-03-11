@@ -395,6 +395,14 @@ Claimed XP: *${stats.xp}*`
   getUnlockedQuests = (quests) =>
     quests.filter((item) => item.unlocked && !item.inReview && item.open);
 
+  getQuestsToClaim = async (subdomain, types) => {
+    const all = await this.getAllQuests(subdomain);
+    const unlocked = this.getUnlockedQuests(all);
+    return unlocked.filter((item) =>
+        types.includes(item.submissionType)
+    );
+  };
+
   // Get invites quests
   getInvitesQuests = (quests) =>
     quests.filter((item) => item.submissionType === "invites");
@@ -810,18 +818,15 @@ ${JSON.stringify(quest.validationData)}`;
         community.name
       }*:`,
     ];
-    const all = await this.getAllQuests(community.subdomain);
-    const unlocked = this.getUnlockedQuests(all);
-    const quests = unlocked.filter((item) =>
-      types.includes(item.submissionType)
-    );
+    const questsToClaim = await this.getQuestsToClaim(community.subdomain, types);
     const communityName = community.name.replace(/[^a-zA-Z0-9 ]/, "");
-    if (quests.length > 0)
+    if (questsToClaim.length > 0)
       report.push(
-        `*${community.name}* \`${community.subdomain}\` (${quests.length} quests):`
+        `*${community.name}* \`${community.subdomain}\` (${questsToClaim.length} quests):`
       );
     const communityAnswers = answers[communityName];
-    for (const quest of quests) {
+    while (questsToClaim.length > 0) {
+      const quest = questsToClaim.pop();
       let answer;
       if (communityAnswers) {
         answer = communityAnswers[quest.name.trim()];
@@ -845,6 +850,11 @@ ${JSON.stringify(quest.validationData)}`;
             user.twitterUsername
           ))
       );
+      if (questsToClaim.length === 0) {
+        await sleep(timeout);
+        const newQuests = await this.getQuestsToClaim(community.subdomain, types);
+        questsToClaim.concat(newQuests);
+      }
     }
     await sleep(timeout);
     console.log(report);
